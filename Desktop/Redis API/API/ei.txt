@@ -1,0 +1,81 @@
+async parcialUpdate(params: ParciaUpdateUserFields) {
+    const {
+        id,
+        ...fieldsToUpdate 
+    } = params;
+
+    const users = await this.getUserById(id);
+    if (users.length === 0) {
+        return Promise.reject('El usuario no existe');
+    }
+
+    let updateFields = [];
+    let updateValues = [];
+
+    Object.keys(fieldsToUpdate).forEach((key) => {
+        if (fieldsToUpdate[key] !== undefined && key !== 'id') { // Verifica si el campo se ha proporcionado y no es el ID
+            if (key === 'password') {
+                const encryptedPassword = CryptoJS.AES.encrypt(fieldsToUpdate[key], process.env.WHATSAPP_SECRET_KEY).toString();
+                updateFields.push('password = ?');
+                updateValues.push(encryptedPassword);
+            } else {
+                updateFields.push(`${key} = ?`);
+                updateValues.push(fieldsToUpdate[key]);
+            }
+        }
+    });
+
+    // Agregar el ID del usuario al final de los valores a actualizar
+    updateValues.push(id);
+
+    const prepareQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`;
+    const [rows] = await this.databaseConexion.query(prepareQuery, updateValues);
+
+    return rows;
+}
+
+
+
+export type ParciaUpdateUserFields = {
+
+        names?: string;
+        lastNames?: string;
+        email?: string;
+        password?: string;
+        id: string;
+    };
+
+parcialUpdate(params: ParciaUpdateUserFields): Promise<any>;
+
+
+function parcialUpdate(request: Request, response: Response) {
+    const id = request.params.id;
+    const {
+        names,
+        lastNames,
+        email,
+        password,
+    } = request.body;
+
+    Controller.parcialUpdateUser({
+        names,
+        lastNames,
+        email,
+        password,
+        id,
+    })
+    .then((result) => {
+        response.status(200).send(result);
+    })
+    .catch((error) => {
+        response.status(500).send(error);
+    });
+}
+router.patch('/id/:id', parcialUpdate)
+
+
+
+async function parcialUpdateUser(params: ParciaUpdateUserFields) {
+    const usersUtils = getUsersUtils();
+    return usersUtils.parcialUpdate(params);
+}
